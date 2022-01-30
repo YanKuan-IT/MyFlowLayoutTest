@@ -1,22 +1,14 @@
 package com.example.myflowlayouttest;
 
 import android.content.Context;
-import android.content.res.Resources;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import java.util.ArrayList;
 import java.util.List;
 
 class MyFlowLayout extends ViewGroup {
-    // 横向间距
-    private int mHorizontalSpacing = dp2px(16);
-
-    // 两行之间的纵向间距
-    private int mVerticalSpacing = dp2px(8);
-
     // 记录所有行 中 每一行的view
     private List<List<View>> mAllLineViewsList = new ArrayList<>();
 
@@ -41,6 +33,12 @@ class MyFlowLayout extends ViewGroup {
         mAllLineHeights.clear();
     }
 
+    // inflate时，会用到AttributeSet
+    @Override
+    public LayoutParams generateLayoutParams(AttributeSet attrs) {
+        return new MarginLayoutParams(getContext(), attrs);
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         // ViewGroup解析的父容器给的 宽/高 size mode
@@ -52,7 +50,7 @@ class MyFlowLayout extends ViewGroup {
         Log.d("AAAAAA", "mHeightMode: " + (mHeightMode >> 30)); // 0
 
         // 根据提供的size和mode，创建度量规范
-//        heightMeasureSpec = MeasureSpec.makeMeasureSpec(mHeightSize, MeasureSpec.EXACTLY);
+        heightMeasureSpec = MeasureSpec.makeMeasureSpec(mHeightSize, MeasureSpec.EXACTLY);
 
         // 多次执行 onMeasure 时，需要先进行清空操作
         clearMeasureParams();
@@ -69,41 +67,31 @@ class MyFlowLayout extends ViewGroup {
         // 流式布局的高度
         int mFlowLayoutHeight = 0;
 
-        // 父容器的padding
-        int mParentPaddingLeft = getPaddingLeft();
-        int mParentPaddingTop = getPaddingTop();
-        int mParentPaddingRight = getPaddingRight();
-        int mParentPaddingBottom = getPaddingBottom();
+        // 父容器的padding - MyFlowLayout
+        int mParentPaddingLeftRight = getPaddingLeft() + getPaddingRight();
+        int mParentPaddingTopBottom = getPaddingTop() + getPaddingBottom();
 
         // 遍历每一个子View，进行度量
         for (int i = 0; i < getChildCount(); i++) {
             // 获取第i个子view
             View mChildView = getChildAt(i);
 
-            // 获取子view的 LayoutParams
-            LayoutParams mChildViewLayoutParams = mChildView.getLayoutParams();
-
             // 判断每一个子View是否为Gone
             if (mChildView.getVisibility() != View.GONE) {
-                // 通过子view的 LayoutParams 获取子View的 MeasureSpec
-                int mChildViewWidthMeasureSpec = getChildMeasureSpec(widthMeasureSpec,
-                        mParentPaddingLeft + mParentPaddingRight,
-                        mChildViewLayoutParams.width
-                );
-                int mChildViewHeightMeasureSpec = getChildMeasureSpec(heightMeasureSpec,
-                        mParentPaddingTop + mParentPaddingBottom,
-                        mChildViewLayoutParams.height
-                );
+                // 度量子view
+//                measureChild(mChildView, widthMeasureSpec, heightMeasureSpec);
+                measureChildWithMargins(mChildView, widthMeasureSpec, 0, heightMeasureSpec, 0);
 
-                // 进行度量子View
-                mChildView.measure(mChildViewWidthMeasureSpec, mChildViewHeightMeasureSpec);
+                MarginLayoutParams lp = (MarginLayoutParams) mChildView.getLayoutParams();
+                int mChildMarginLeftRight = lp.leftMargin + lp.rightMargin;
+                int mChildMarginTopBottom = lp.topMargin + lp.bottomMargin;
 
                 // 获取子view 的度量宽和高
                 int mChildViewMeasuredWidth = mChildView.getMeasuredWidth();
                 int mChildViewMeasuredHeight = mChildView.getMeasuredHeight();
 
                 // 判断当前view在当前行 是否放得下，如果不行的话，就换行
-                if (mChildViewMeasuredWidth + mLineWidthUsed + mHorizontalSpacing > mWidthSize) {
+                if (mChildViewMeasuredWidth + mLineWidthUsed + mChildMarginLeftRight + mParentPaddingLeftRight > mWidthSize) {
                     // 换行
                     // 保存上一行 的 view
                     mAllLineViewsList.add(mLineViewsList);
@@ -111,9 +99,8 @@ class MyFlowLayout extends ViewGroup {
                     mAllLineHeights.add(mLineHeight);
 
                     // 流式布局的宽、高
-                    mFlowLayoutWidth = Math.max(mFlowLayoutWidth,
-                            mLineWidthUsed + mHorizontalSpacing);
-                    mFlowLayoutHeight = mFlowLayoutHeight + mLineHeight + mVerticalSpacing;
+                    mFlowLayoutWidth = Math.max(mFlowLayoutWidth, mLineWidthUsed);
+                    mFlowLayoutHeight += mLineHeight;
 
                     mLineHeight = 0;
                     mLineWidthUsed = 0;
@@ -121,9 +108,10 @@ class MyFlowLayout extends ViewGroup {
                 }
 
                 mLineViewsList.add(mChildView);
+
                 // 每行的宽、高
-                mLineWidthUsed = mLineWidthUsed + mChildViewMeasuredWidth + mHorizontalSpacing;
-                mLineHeight = Math.max(mLineHeight, mChildViewMeasuredHeight);
+                mLineWidthUsed += mChildViewMeasuredWidth + mChildMarginLeftRight;
+                mLineHeight = Math.max(mLineHeight, mChildViewMeasuredHeight + mChildMarginTopBottom);
 
                 // 最后一行的子view
                 if (i == getChildCount() - 1) {
@@ -134,11 +122,15 @@ class MyFlowLayout extends ViewGroup {
                     mAllLineHeights.add(mLineHeight);
 
                     // 流式布局的宽、高
-                    mFlowLayoutWidth = Math.max(mFlowLayoutWidth, mLineWidthUsed + mHorizontalSpacing);
-                    mFlowLayoutHeight = mFlowLayoutHeight + mLineHeight + mVerticalSpacing;
+                    mFlowLayoutWidth = Math.max(mFlowLayoutWidth, mLineWidthUsed);
+                    mFlowLayoutHeight += mLineHeight;
                 }
             }
         }
+
+        // 流式布局的宽高，需要加上padding
+        mFlowLayoutWidth += mParentPaddingLeftRight;
+        mFlowLayoutHeight += mParentPaddingTopBottom;
 
         int realWidth = (mWidthMode == MeasureSpec.EXACTLY) ? mWidthSize : mFlowLayoutWidth;
         int realHeight = (mHeightMode == MeasureSpec.EXACTLY) ? mHeightSize : mFlowLayoutHeight;
@@ -160,34 +152,25 @@ class MyFlowLayout extends ViewGroup {
                 // 获取到子View
                 View view = mAllLineViewsList.get(i).get(j);
 
+                MarginLayoutParams lp = (MarginLayoutParams) view.getLayoutParams();
+
                 // 布局坐标：左上右下位置
-                int mLeft = mCurrentX;
-                int mTop = mCurrentY;
-                int mRight = mCurrentX + view.getMeasuredWidth();
-                int mBottom = mCurrentY + view.getMeasuredHeight();
+                int mLeft = mCurrentX + lp.leftMargin;
+                int mTop = mCurrentY + lp.topMargin;
+                int mRight = mLeft + view.getMeasuredWidth();
+                int mBottom = mTop + view.getMeasuredHeight();
 
                 // 布局
                 view.layout(mLeft, mTop, mRight, mBottom);
 
                 // 起始 X 坐标移动一个view的 宽度+间隔
-                mCurrentX += view.getMeasuredWidth() + mHorizontalSpacing;
+                mCurrentX = mRight + lp.rightMargin;
             }
 
             // 换新的一行后，X坐标移动上一行的高度 + 间隔
-            mCurrentY += mAllLineHeights.get(i) + mVerticalSpacing;
+            mCurrentY += mAllLineHeights.get(i);
             // X坐标起始为padding
             mCurrentX = getPaddingLeft();
         }
-    }
-
-    /**
-     * dp 转成 px
-     */
-    public static int dp2px(int dp) {
-        return (int) TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP,
-                dp,
-                Resources.getSystem().getDisplayMetrics()
-        );
     }
 }
