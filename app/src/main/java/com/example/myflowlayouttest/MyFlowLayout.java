@@ -3,6 +3,7 @@ package com.example.myflowlayouttest;
 import android.content.Context;
 import android.content.res.Resources;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,9 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 class MyFlowLayout extends ViewGroup {
-
     // 横向间距
     private int mHorizontalSpacing = dp2px(16);
+
     // 两行之间的纵向间距
     private int mVerticalSpacing = dp2px(8);
 
@@ -42,6 +43,17 @@ class MyFlowLayout extends ViewGroup {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        // ViewGroup解析的父容器给的 宽/高 size mode
+        int mWidthSize = MeasureSpec.getSize(widthMeasureSpec);
+        int mWidthMode = MeasureSpec.getMode(widthMeasureSpec);
+        int mHeightSize = MeasureSpec.getSize(heightMeasureSpec);
+        int mHeightMode = MeasureSpec.getMode(heightMeasureSpec);
+
+        Log.d("AAAAAA", "mHeightMode: " + (mHeightMode >> 30)); // 0
+
+        // 根据提供的size和mode，创建度量规范
+//        heightMeasureSpec = MeasureSpec.makeMeasureSpec(mHeightSize, MeasureSpec.EXACTLY);
+
         // 多次执行 onMeasure 时，需要先进行清空操作
         clearMeasureParams();
 
@@ -63,16 +75,8 @@ class MyFlowLayout extends ViewGroup {
         int mParentPaddingRight = getPaddingRight();
         int mParentPaddingBottom = getPaddingBottom();
 
-        // ViewGroup解析的父容器给的 宽度
-        int selfWidth = MeasureSpec.getSize(widthMeasureSpec);
-        // ViewGroup解析的父容器给的 高度
-        int selfHeight = MeasureSpec.getSize(heightMeasureSpec);
-
-        // 获取子view的个数
-        int childViewCount = getChildCount();
-
         // 遍历每一个子View，进行度量
-        for (int i = 0; i < childViewCount; i++) {
+        for (int i = 0; i < getChildCount(); i++) {
             // 获取第i个子view
             View mChildView = getChildAt(i);
 
@@ -99,7 +103,7 @@ class MyFlowLayout extends ViewGroup {
                 int mChildViewMeasuredHeight = mChildView.getMeasuredHeight();
 
                 // 判断当前view在当前行 是否放得下，如果不行的话，就换行
-                if (mChildViewMeasuredWidth + mLineWidthUsed + mHorizontalSpacing > selfWidth) {
+                if (mChildViewMeasuredWidth + mLineWidthUsed + mHorizontalSpacing > mWidthSize) {
                     // 换行
                     // 保存上一行 的 view
                     mAllLineViewsList.add(mLineViewsList);
@@ -122,7 +126,7 @@ class MyFlowLayout extends ViewGroup {
                 mLineHeight = Math.max(mLineHeight, mChildViewMeasuredHeight);
 
                 // 最后一行的子view
-                if (i == childViewCount - 1) {
+                if (i == getChildCount() - 1) {
                     // 把最后一行的子View添加进去
                     mAllLineViewsList.add(mLineViewsList);
 
@@ -130,19 +134,14 @@ class MyFlowLayout extends ViewGroup {
                     mAllLineHeights.add(mLineHeight);
 
                     // 流式布局的宽、高
-                    mFlowLayoutWidth = Math.max(mFlowLayoutWidth,
-                            mLineWidthUsed + mHorizontalSpacing);
+                    mFlowLayoutWidth = Math.max(mFlowLayoutWidth, mLineWidthUsed + mHorizontalSpacing);
                     mFlowLayoutHeight = mFlowLayoutHeight + mLineHeight + mVerticalSpacing;
                 }
             }
         }
 
-        // 度量父容器
-        int mWidthMode = MeasureSpec.getMode(widthMeasureSpec);
-        int mHeightMode = MeasureSpec.getMode(heightMeasureSpec);
-
-        int realWidth = (mWidthMode == MeasureSpec.EXACTLY) ? selfWidth : mFlowLayoutWidth;
-        int realHeight = (mHeightMode == MeasureSpec.EXACTLY) ? selfHeight : mFlowLayoutHeight;
+        int realWidth = (mWidthMode == MeasureSpec.EXACTLY) ? mWidthSize : mFlowLayoutWidth;
+        int realHeight = (mHeightMode == MeasureSpec.EXACTLY) ? mHeightSize : mFlowLayoutHeight;
 
         // 保存
         setMeasuredDimension(realWidth, realHeight);
@@ -150,33 +149,34 @@ class MyFlowLayout extends ViewGroup {
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        // 所有行数
-        int mLineCount = mAllLineViewsList.size();
+        // X、Y 的起始坐标
+        int mCurrentX = getPaddingLeft();
+        int mCurrentY = getPaddingTop();
 
-        // padding
-        int mCurrentLeft = getPaddingLeft();
-        int mCurrentTop = getPaddingTop();
+        // 遍历每一行的viewList
+        for (int i = 0; i < mAllLineViewsList.size(); i++) {
+            // 遍历每一行 的 每一个 子View
+            for (int j = 0; j < mAllLineViewsList.get(i).size(); j++) {
+                // 获取到子View
+                View view = mAllLineViewsList.get(i).get(j);
 
-        for (int i = 0; i < mLineCount; i++) {
-            // 获取每一行的view
-            List<View> mLineViewsList = mAllLineViewsList.get(i);
+                // 布局坐标：左上右下位置
+                int mLeft = mCurrentX;
+                int mTop = mCurrentY;
+                int mRight = mCurrentX + view.getMeasuredWidth();
+                int mBottom = mCurrentY + view.getMeasuredHeight();
 
-            // 对每一个子view进行布局
-            for (int j = 0; j < mLineViewsList.size(); j++) {
-                View view = mLineViewsList.get(j);
+                // 布局
+                view.layout(mLeft, mTop, mRight, mBottom);
 
-                view.layout(
-                        mCurrentLeft,
-                        mCurrentTop,
-                        mCurrentLeft + view.getMeasuredWidth(),
-                        mCurrentTop + view.getMeasuredHeight()
-                );
-
-                mCurrentLeft = mCurrentLeft + view.getMeasuredWidth() + mHorizontalSpacing;
+                // 起始 X 坐标移动一个view的 宽度+间隔
+                mCurrentX += view.getMeasuredWidth() + mHorizontalSpacing;
             }
 
-            mCurrentTop = mCurrentTop + mAllLineHeights.get(i) + mVerticalSpacing;
-            mCurrentLeft = getPaddingLeft();
+            // 换新的一行后，X坐标移动上一行的高度 + 间隔
+            mCurrentY += mAllLineHeights.get(i) + mVerticalSpacing;
+            // X坐标起始为padding
+            mCurrentX = getPaddingLeft();
         }
     }
 
@@ -190,5 +190,4 @@ class MyFlowLayout extends ViewGroup {
                 Resources.getSystem().getDisplayMetrics()
         );
     }
-
 }
